@@ -3,7 +3,11 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from models import Base, Product
 from database import engine, get_db
-from typing import Optional, List
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
+from fastapi.responses import StreamingResponse
 
 app = FastAPI()
 Base.metadata.create_all(bind=engine)
@@ -97,3 +101,32 @@ def get_analytics(db: Session = Depends(get_db)):
             {"id": p.id, "name": p.name, "stock": p.stock} for p in low_stock
         ]
     }
+
+@app.get("/inventory-report/")
+def generate_inventory_report(db: Session = Depends(get_db)):
+    products = db.query(Product).all()
+    if not products:
+        raise HTTPException(status_code=404, detail="No products found")
+
+    # Create PDF in memory
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    data = [["ID", "Name", "Description", "Price", "Stock"]]  # Table header
+    for product in products:
+        data.append([product.id, product.name, product.description, product.price, product.stock])
+    
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    
+    doc.build([table])
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=inventory_report.pdf"})
