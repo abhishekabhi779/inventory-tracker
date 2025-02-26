@@ -1,0 +1,15 @@
+# Virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite database
+inventory.db
+
+# IDE-specific files (optional)
+.vscode/
+*.log
